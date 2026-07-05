@@ -1,129 +1,94 @@
-# RAG Q&A Bot — Nghị định Xử phạt
+# RAG Q&A Bot - Chatbot hỏi đáp tài liệu pháp lý
 
-Hệ thống hỏi đáp thông minh dựa trên RAG (Retrieval-Augmented Generation) cho tài liệu pháp lý.
+Project thực tập: xây dựng hệ thống cho phép upload tài liệu PDF (nghị định xử phạt vi phạm hành chính) và hỏi đáp dựa trên nội dung tài liệu đó, có trích dẫn nguồn.
 
-## Tính năng
+## Mô tả
 
-- 📄 Upload PDF / text → tự động chunk → embed → lưu vector store
-- 🔍 Hỏi đáp dựa trên nội dung tài liệu với trích dẫn nguồn
-- 🚫 Từ chối trả lời khi không có dữ liệu (chống hallucination)
-- ⚡ Xử lý bất đồng bộ với Celery cho file lớn
-- 🔌 Dễ đổi LLM/Vector DB nhờ kiến trúc interface-based
+Người dùng upload file PDF lên, hệ thống sẽ tự động xử lý (cắt đoạn, tạo embedding, lưu vào vector database). Sau đó có thể đặt câu hỏi bằng tiếng Việt, hệ thống tìm các đoạn liên quan trong tài liệu rồi gọi LLM để trả lời kèm trích dẫn. Nếu không tìm thấy thông tin phù hợp thì từ chối trả lời thay vì bịa.
 
-## Tech Stack
+Kiến trúc theo hướng RAG (Retrieval-Augmented Generation).
 
-| Component | Technology |
-|---|---|
-| API | FastAPI + Uvicorn |
-| LLM | Anthropic Claude 3.5 Haiku |
-| Embedding | OpenAI text-embedding-3-small |
-| Vector DB | Qdrant |
-| Database | PostgreSQL + SQLAlchemy |
-| Queue | Celery + Redis |
-| File Parsing | pypdf + unstructured |
+## Tech stack
 
-## Cài đặt nhanh
+- API: FastAPI
+- LLM: Anthropic Claude 3.5 Haiku (hoặc OpenAI GPT-4o-mini, Ollama)
+- Embedding: OpenAI text-embedding-3-small
+- Vector DB: Qdrant
+- Database: PostgreSQL + SQLAlchemy (lưu metadata tài liệu)
+- Task queue: Celery + Redis (xử lý upload bất đồng bộ)
+- File parsing: pypdf, unstructured
 
-### 1. Clone & cấu hình
+## Cài đặt
+
+**Yêu cầu:** Docker Desktop đã cài và đang chạy.
 
 ```bash
-git clone <repo>
-cd rag-qna-bot
+git clone https://github.com/vuvinh1910/thuc-tap-prj.git
+cd thuc-tap-prj
 cp .env.example .env
-# Điền OPENAI_API_KEY và ANTHROPIC_API_KEY vào .env
 ```
 
-### 2. Khởi động với Docker
+Mở file `.env`, điền API key vào:
+```
+OPENAI_API_KEY=...
+ANTHROPIC_API_KEY=...
+```
 
+Khởi động:
 ```bash
-docker-compose up -d
+docker compose up -d
+docker compose exec api alembic upgrade head
 ```
 
-### 3. Chạy migrations
+Kiểm tra tại:
+- API docs: http://localhost:8000/docs
+- Celery monitor: http://localhost:5555
+- Qdrant: http://localhost:6333/dashboard
 
-```bash
-docker-compose exec api alembic upgrade head
-```
+## Sử dụng
 
-### 4. Kiểm tra
-
-- API Docs: http://localhost:8000/docs
-- Flower (queue monitor): http://localhost:5555
-- Qdrant Dashboard: http://localhost:6333/dashboard
-
-## API Usage
-
-### Upload tài liệu
-
+Upload tài liệu:
 ```bash
 curl -X POST http://localhost:8000/api/v1/documents/upload \
-  -F "file=@nghi-dinh-xp.pdf"
+  -F "file=@nghi-dinh.pdf"
 ```
 
-Response:
-```json
-{
-  "document_id": "uuid",
-  "status": "pending",
-  "message": "File đang được xử lý"
-}
-```
-
-### Kiểm tra trạng thái
-
+Trả về `document_id`, dùng để kiểm tra trạng thái xử lý:
 ```bash
 curl http://localhost:8000/api/v1/documents/{document_id}/status
 ```
 
-### Đặt câu hỏi
-
+Khi status là `completed` thì có thể đặt câu hỏi:
 ```bash
 curl -X POST http://localhost:8000/api/v1/ask \
   -H "Content-Type: application/json" \
   -d '{"question": "Mức phạt vi phạm tốc độ là bao nhiêu?"}'
 ```
 
-Response:
-```json
-{
-  "answer": "Theo Nghị định..., mức phạt vi phạm tốc độ là...",
-  "is_grounded": true,
-  "citations": [
-    {
-      "filename": "nghi-dinh-xp.pdf",
-      "page_number": 12,
-      "excerpt": "..."
-    }
-  ]
-}
-```
+Response trả về câu trả lời, `is_grounded` (có dựa trên tài liệu không), và danh sách trích dẫn (file, trang, đoạn văn).
 
-## Development
-
-```bash
-# Chạy local (không Docker)
-pip install -e ".[dev]"
-uvicorn src.api.main:app --reload
-
-# Chạy Celery worker
-celery -A src.workers.celery_app worker --loglevel=info -Q ingest
-
-# Chạy tests
-pytest --cov=src
-
-# Lint
-ruff check src/
-```
-
-## Cấu trúc dự án
+## Cấu trúc thư mục
 
 ```
 src/
-├── api/           # FastAPI routers, schemas, dependencies
+├── api/            # FastAPI routes, schemas, dependency injection
 ├── core/
-│   ├── entities/  # Pure domain models
-│   ├── interfaces/ # Abstract contracts (ILLMProvider, IVectorStore...)
-│   └── services/  # Business logic
-├── infrastructure/ # Concrete implementations (OpenAI, Qdrant, Postgres...)
-└── workers/       # Celery async tasks
+│   ├── entities/   # Domain models (Document, Chunk, LLMResponse...)
+│   ├── interfaces/ # Abstract interface cho LLM, vector store, storage...
+│   └── services/   # Business logic (chunking, ingestion, query)
+├── infrastructure/ # Implementation cụ thể (OpenAI, Qdrant, Postgres, pypdf)
+└── workers/        # Celery task xử lý ingest bất đồng bộ
+```
+
+## Chạy local (không Docker)
+
+```bash
+pip install -e ".[dev]"
+uvicorn src.api.main:app --reload
+
+# Worker riêng
+celery -A src.workers.celery_app worker --loglevel=info -Q ingest
+
+# Test
+pytest --cov=src
 ```
