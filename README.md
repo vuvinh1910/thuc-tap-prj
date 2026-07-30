@@ -92,3 +92,22 @@ celery -A src.workers.celery_app worker --loglevel=info -Q ingest
 # Test
 pytest --cov=src
 ```
+
+
+## API Endpoints
+
+| Method | Endpoint | Mo ta |
+|--------|----------|-------|
+| POST | /api/v1/documents/upload | Upload file PDF, tra ve 202 + document_id |
+| GET  | /api/v1/documents/{id}/status | Polling trang thai xu ly |
+| GET  | /api/v1/documents/ | Danh sach tai lieu da upload |
+| DELETE | /api/v1/documents/{id} | Xoa tai lieu |
+| POST | /api/v1/query/ask | Dat cau hoi, nhan cau tra loi + citations |
+
+## Chay he thong
+
+1. Copy file cau hinh: cp .env.example .env (dien OPENAI_API_KEY)
+2. Khoi dong services: docker compose up -d
+3. Chay migration: docker compose exec api alembic upgrade head
+4. API docs: http://localhost:8000/docs
+5. Chay tests: docker compose exec api pytest tests/unit/ -v
