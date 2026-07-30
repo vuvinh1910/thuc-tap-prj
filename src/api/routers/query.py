@@ -11,7 +11,7 @@ from src.api.schemas.query import AskRequest, AskResponse, CitationResponse
 
 logger = structlog.get_logger(__name__)
 
-router = APIRouter(tags=["Q&A"])
+router = APIRouter(prefix="/query", tags=["Q&A"])
 
 
 @router.post(
@@ -42,6 +42,7 @@ async def ask_question(
             question=request.question,
             top_k=request.top_k,
             score_threshold=request.score_threshold,
+            document_ids=request.document_ids,
         )
     except Exception as e:
         logger.error("ask_endpoint_error", error=str(e), question=request.question[:80])

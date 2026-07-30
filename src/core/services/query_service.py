@@ -39,6 +39,7 @@ class QueryService:
         question: str,
         top_k: int | None = None,
         score_threshold: float | None = None,
+        document_ids: list | None = None,
     ) -> LLMResponse:
         """
         Answer a question using RAG.
@@ -47,6 +48,7 @@ class QueryService:
             question: The user's question (in Vietnamese).
             top_k: Number of context chunks to retrieve. Defaults to settings.
             score_threshold: Minimum similarity score. Defaults to settings.
+            document_ids: Optional list of UUID to restrict search scope.
 
         Returns:
             LLMResponse with answer + citations, or a refusal if no context found.
@@ -64,6 +66,7 @@ class QueryService:
             query_vector=query_vector,
             top_k=top_k,
             score_threshold=score_threshold,
+            document_ids=document_ids,
         )
 
         logger.info("query_retrieved", result_count=len(results), top_k=top_k)

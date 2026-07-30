@@ -11,7 +11,7 @@ from uuid import UUID
 import structlog
 from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
-from src.api.dependencies import DocumentRepoDep, FileStorageDep, SettingsDep
+from src.api.dependencies import DocumentRepoDep, FileStorageDep, SettingsDep, VectorStoreDep
 from src.api.schemas.document import (
     DocumentListResponse,
     DocumentStatusResponse,
@@ -159,10 +159,9 @@ async def delete_document(
     document_id: UUID,
     doc_repo: DocumentRepoDep,
     file_storage: FileStorageDep,
+    vector_store: VectorStoreDep,
 ) -> None:
     """Delete a document and remove its vectors from Qdrant."""
-    from src.infrastructure.vector_store.qdrant_store import QdrantVectorStore
-
     doc = await doc_repo.find_by_id(document_id)
     if not doc:
         raise HTTPException(
@@ -171,7 +170,6 @@ async def delete_document(
         )
 
     # Remove vectors from Qdrant
-    vector_store = QdrantVectorStore()
     await vector_store.delete_by_document(document_id)
 
     # Delete file from storage

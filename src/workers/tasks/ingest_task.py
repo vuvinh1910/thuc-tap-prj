@@ -28,6 +28,8 @@ def _build_ingestion_service():
     from src.infrastructure.vector_store.qdrant_store import QdrantVectorStore
 
     settings = get_settings()
+
+    # AsyncSessionFactory is a sessionmaker — call it to get a scoped session
     session = AsyncSessionFactory()
 
     chunking_service = ChunkingService(

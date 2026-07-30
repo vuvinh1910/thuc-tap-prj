@@ -98,6 +98,12 @@ class Settings(BaseSettings):
     def max_file_size_bytes(self) -> int:
         return self.max_file_size_mb * 1024 * 1024
 
+    # ── CORS ─────────────────────────────────────────────────────────────────
+    allowed_origins: list[str] = Field(
+        default=["*"],
+        description="Danh sách origin được phép (CORS). Dùng ['*'] cho dev.",
+    )
+
     # ── Chunking ─────────────────────────────────────────────────────────────
     chunk_size: int = 512
     chunk_overlap: int = 50
