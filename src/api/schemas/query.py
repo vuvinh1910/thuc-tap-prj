@@ -55,3 +55,19 @@ class AskResponse(BaseModel):
     citations: list[CitationResponse] = Field(default_factory=list)
     model_used: str = ""
     usage_tokens: int = 0
+
+
+class QueryHistoryResponse(BaseModel):
+    """Summary of a past Q&A interaction for GET /query/history."""
+
+    id: UUID
+    question: str
+    answer: str
+    is_grounded: bool
+    model_used: str
+    usage_tokens: int
+    citation_count: int
+    created_at: str
+
+    class Config:
+        json_encoders = {__import__("datetime").datetime: lambda v: v.isoformat()}

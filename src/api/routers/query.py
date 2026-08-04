@@ -1,13 +1,15 @@
 """
-Query router — handles the RAG Q&A endpoint.
-POST /api/v1/ask
+Query router — handles the RAG Q&A and history endpoints.
+POST /api/v1/query/ask
+GET  /api/v1/query/history
 """
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Request, status
 
-from src.api.dependencies import QueryServiceDep
-from src.api.schemas.query import AskRequest, AskResponse, CitationResponse
+from src.api.dependencies import QueryHistoryRepoDep, QueryServiceDep
+from src.api.main import limiter
+from src.api.schemas.query import AskRequest, AskResponse, CitationResponse, QueryHistoryResponse
 
 logger = structlog.get_logger(__name__)
 
@@ -21,31 +23,25 @@ router = APIRouter(prefix="/query", tags=["Q&A"])
     description=(
         "Nhận câu hỏi, truy xuất đoạn văn liên quan từ tài liệu đã tải, "
         "và trả về câu trả lời kèm trích dẫn nguồn. "
-        "Trả về `is_grounded=false` khi không tìm thấy ngữ cảnh phù hợp."
+        "Trả về `is_grounded=false` khi không tìm thấy ngữ cảnh phù hợp. "
+        "Giới hạn: 20 yêu cầu/phút."
     ),
 )
+@limiter.limit("20/minute")
 async def ask_question(
-    request: AskRequest,
+    request: Request,
+    body: AskRequest,
     query_service: QueryServiceDep,
 ) -> AskResponse:
-    """
-    RAG Q&A endpoint.
-
-    Steps:
-    1. Embed the question
-    2. Retrieve top-k relevant chunks from Qdrant
-    3. If no grounded context → return refusal
-    4. Build prompt → call LLM → return answer + citations
-    """
     try:
         llm_response = await query_service.ask(
-            question=request.question,
-            top_k=request.top_k,
-            score_threshold=request.score_threshold,
-            document_ids=request.document_ids,
+            question=body.question,
+            top_k=body.top_k,
+            score_threshold=body.score_threshold,
+            document_ids=body.document_ids,
         )
     except Exception as e:
-        logger.error("ask_endpoint_error", error=str(e), question=request.question[:80])
+        logger.error("ask_endpoint_error", error=str(e), question=body.question[:80])
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Lỗi xử lý câu hỏi. Vui lòng thử lại.",
@@ -67,3 +63,30 @@ async def ask_question(
         model_used=llm_response.model_used,
         usage_tokens=llm_response.usage_tokens,
     )
+
+
+@router.get(
+    "/history",
+    response_model=list[QueryHistoryResponse],
+    summary="Lịch sử các câu hỏi đã hỏi",
+    description="Trả về danh sách các câu hỏi và câu trả lời gần nhất, sắp xếp mới nhất trước.",
+)
+async def get_history(
+    history_repo: QueryHistoryRepoDep,
+    limit: int = 20,
+    offset: int = 0,
+) -> list[QueryHistoryResponse]:
+    records = await history_repo.list_recent(limit=limit, offset=offset)
+    return [
+        QueryHistoryResponse(
+            id=r.id,
+            question=r.question,
+            answer=r.answer,
+            is_grounded=r.is_grounded,
+            model_used=r.model_used,
+            usage_tokens=r.usage_tokens,
+            citation_count=len(r.citations),
+            created_at=r.created_at,
+        )
+        for r in records
+    ]
