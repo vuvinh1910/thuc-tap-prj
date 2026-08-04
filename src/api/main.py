@@ -9,6 +9,9 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 
 from src.api.routers import documents, query
 from src.config.settings import get_settings
@@ -16,13 +19,12 @@ from src.config.settings import get_settings
 logger = structlog.get_logger(__name__)
 settings = get_settings()
 
+# Rate limiter — keyed by client IP
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan handler.
-    Runs startup logic before yield, teardown after.
-    """
     logger.info(
         "ragbot_starting",
         env=settings.app_env,
@@ -30,7 +32,6 @@ async def lifespan(app: FastAPI):
         embedding_provider=settings.embedding_provider,
     )
 
-    # Ensure DB tables exist (for development convenience)
     if settings.is_development:
         from src.infrastructure.database.models import Base
         from src.infrastructure.database.session import engine
@@ -44,18 +45,21 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    """Application factory — creates and configures the FastAPI app."""
     app = FastAPI(
         title="RAG Q&A Bot — Nghị định Xử phạt",
         description=(
             "Hệ thống hỏi đáp thông minh dựa trên RAG cho tài liệu pháp lý Việt Nam. "
             "Upload tài liệu PDF và đặt câu hỏi — hệ thống trả lời kèm trích dẫn nguồn."
         ),
-        version="0.1.0",
+        version="0.2.0",
         docs_url="/docs",
         redoc_url="/redoc",
         lifespan=lifespan,
     )
+
+    # ── Rate Limiting ────────────────────────────────────────────────────────
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
     # ── CORS ────────────────────────────────────────────────────────────────
     app.add_middleware(
@@ -73,11 +77,43 @@ def create_app() -> FastAPI:
     # ── Health Check ────────────────────────────────────────────────────────
     @app.get("/health", tags=["System"])
     async def health_check() -> dict:
+        """
+        Kiểm tra trạng thái kết nối của tất cả các thành phần hệ thống.
+        Trả về status=degraded nếu một trong các service phụ thuộc không khả dụng.
+        """
+        from sqlalchemy import text
+
+        from src.infrastructure.database.session import AsyncSessionFactory
+        from src.infrastructure.vector_store.qdrant_store import QdrantVectorStore
+
+        checks: dict[str, str] = {}
+
+        # Check PostgreSQL
+        try:
+            async with AsyncSessionFactory() as session:
+                await session.execute(text("SELECT 1"))
+            checks["postgres"] = "ok"
+        except Exception as e:
+            logger.warning("health_check_postgres_failed", error=str(e))
+            checks["postgres"] = "error"
+
+        # Check Qdrant
+        try:
+            qdrant = QdrantVectorStore()
+            await qdrant.collection_exists()
+            checks["qdrant"] = "ok"
+        except Exception as e:
+            logger.warning("health_check_qdrant_failed", error=str(e))
+            checks["qdrant"] = "error"
+
+        overall = "healthy" if all(v == "ok" for v in checks.values()) else "degraded"
+
         return {
-            "status": "healthy",
-            "version": "0.1.0",
+            "status": overall,
+            "version": "0.2.0",
             "env": settings.app_env,
             "llm_provider": settings.llm_provider,
+            "checks": checks,
         }
 
     # ── Global Exception Handler ─────────────────────────────────────────────
