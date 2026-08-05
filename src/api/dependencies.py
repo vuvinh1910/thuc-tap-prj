@@ -15,11 +15,13 @@ from src.core.interfaces.document_repo import IDocumentRepository
 from src.core.interfaces.embedding import IEmbeddingProvider
 from src.core.interfaces.file_storage import IFileStorage
 from src.core.interfaces.llm import ILLMProvider
+from src.core.interfaces.query_history_repo import IQueryHistoryRepository
 from src.core.interfaces.vector_store import IVectorStore
 from src.core.services.chunking_service import ChunkingConfig, ChunkingService, ChunkingStrategy
 from src.core.services.prompt_builder import PromptBuilder
 from src.core.services.query_service import QueryService
 from src.infrastructure.database.document_repo import PostgresDocumentRepository
+from src.infrastructure.database.query_history_repo import PostgresQueryHistoryRepository
 from src.infrastructure.database.session import get_async_session
 from src.infrastructure.file_storage.local_storage import LocalFileStorage
 from src.infrastructure.vector_store.qdrant_store import QdrantVectorStore
@@ -44,6 +46,12 @@ def get_document_repo(session: SessionDep) -> IDocumentRepository:
     return PostgresDocumentRepository(session)
 
 DocumentRepoDep = Annotated[IDocumentRepository, Depends(get_document_repo)]
+
+
+def get_query_history_repo(session: SessionDep) -> IQueryHistoryRepository:
+    return PostgresQueryHistoryRepository(session)
+
+QueryHistoryRepoDep = Annotated[IQueryHistoryRepository, Depends(get_query_history_repo)]
 
 
 # ── Infrastructure Providers ──────────────────────────────────────────────────
@@ -109,12 +117,14 @@ def get_query_service(
     embedding: EmbeddingDep,
     vector_store: VectorStoreDep,
     llm: LLMDep,
+    history_repo: QueryHistoryRepoDep,
 ) -> QueryService:
     return QueryService(
         embedding_provider=embedding,
         vector_store=vector_store,
         llm_provider=llm,
         prompt_builder=PromptBuilder(),
+        history_repo=history_repo,
     )
 
 QueryServiceDep = Annotated[QueryService, Depends(get_query_service)]
