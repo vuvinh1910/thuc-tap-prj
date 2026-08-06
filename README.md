@@ -1,113 +1,251 @@
-# RAG Q&A Bot - Chatbot hỏi đáp tài liệu pháp lý
+# RAG Q&A Bot — Chatbot hỏi đáp tài liệu pháp lý
 
-Project thực tập: xây dựng hệ thống cho phép upload tài liệu PDF (nghị định xử phạt vi phạm hành chính) và hỏi đáp dựa trên nội dung tài liệu đó, có trích dẫn nguồn.
+Hệ thống cho phép upload tài liệu PDF (nghị định, thông tư, văn bản pháp luật) và đặt câu hỏi bằng tiếng Việt. Hệ thống tìm kiếm các đoạn liên quan trong tài liệu, gọi LLM để trả lời kèm trích dẫn nguồn cụ thể (tên file, số trang). Nếu không tìm thấy ngữ cảnh phù hợp, hệ thống **từ chối trả lời** thay vì bịa đặt.
 
-## Mô tả
+---
 
-Người dùng upload file PDF lên, hệ thống sẽ tự động xử lý (cắt đoạn, tạo embedding, lưu vào vector database). Sau đó có thể đặt câu hỏi bằng tiếng Việt, hệ thống tìm các đoạn liên quan trong tài liệu rồi gọi LLM để trả lời kèm trích dẫn. Nếu không tìm thấy thông tin phù hợp thì từ chối trả lời thay vì bịa.
+## Kiến trúc tổng quan
 
-Kiến trúc theo hướng RAG (Retrieval-Augmented Generation).
+```
+Người dùng
+    │
+    ▼
+FastAPI (API Layer)
+    │
+    ├── Upload PDF ──► Celery Worker ──► Parse ──► Chunk ──► Embed ──► Qdrant
+    │
+    └── Đặt câu hỏi ──► Embed câu hỏi ──► Tìm kiếm Qdrant ──► Gọi LLM ──► Trả lời + Citations
+                                                                      │
+                                                                      └── Lưu PostgreSQL (lịch sử)
+```
 
 ## Tech stack
 
-- API: FastAPI
-- LLM: Anthropic Claude 3.5 Haiku (hoặc OpenAI GPT-4o-mini, Ollama)
-- Embedding: OpenAI text-embedding-3-small
-- Vector DB: Qdrant
-- Database: PostgreSQL + SQLAlchemy (lưu metadata tài liệu)
-- Task queue: Celery + Redis (xử lý upload bất đồng bộ)
-- File parsing: pypdf, unstructured
+| Thành phần | Công nghệ |
+|---|---|
+| API Framework | FastAPI |
+| LLM | Anthropic Claude 3.5 Haiku / OpenAI GPT-4o-mini / Ollama |
+| Embedding | OpenAI `text-embedding-3-small` |
+| Vector Database | Qdrant |
+| Relational Database | PostgreSQL + SQLAlchemy async |
+| Task Queue | Celery + Redis |
+| File Parsing | pypdf, unstructured |
+| Rate Limiting | slowapi |
 
-## Cài đặt
+---
 
-**Yêu cầu:** Docker Desktop đã cài và đang chạy.
+## Yêu cầu trước khi cài đặt
+
+1. **Docker Desktop** — tải tại https://www.docker.com/products/docker-desktop/
+2. **API Keys** (cần ít nhất một trong hai):
+   - **OpenAI API Key** (bắt buộc — dùng cho embedding): https://platform.openai.com/api-keys
+   - **Anthropic API Key** (dùng cho LLM mặc định): https://console.anthropic.com/
+
+---
+
+## Cài đặt và chạy (Docker — khuyến nghị)
+
+### Bước 1 — Clone repo
 
 ```bash
 git clone https://github.com/vuvinh1910/thuc-tap-prj.git
 cd thuc-tap-prj
+```
+
+### Bước 2 — Tạo file cấu hình
+
+```bash
 cp .env.example .env
 ```
 
-Mở file `.env`, điền API key vào:
-```
-OPENAI_API_KEY=...
-ANTHROPIC_API_KEY=...
+Mở file `.env` và điền API key:
+
+```env
+# Bắt buộc
+OPENAI_API_KEY=sk-...
+
+# Chọn một trong hai:
+ANTHROPIC_API_KEY=sk-ant-...   # dùng nếu LLM_PROVIDER=anthropic (mặc định)
+# hoặc để trống nếu dùng LLM_PROVIDER=openai
+
+# Cấu hình LLM (mặc định: anthropic)
+LLM_PROVIDER=anthropic         # anthropic | openai | ollama
 ```
 
-Khởi động:
+### Bước 3 — Khởi động toàn bộ hệ thống
+
 ```bash
 docker compose up -d
+```
+
+Lệnh này khởi động: FastAPI, Celery Worker, PostgreSQL, Redis, Qdrant, Flower.
+
+### Bước 4 — Chạy migration database
+
+```bash
 docker compose exec api alembic upgrade head
 ```
 
-Kiểm tra tại:
-- API docs: http://localhost:8000/docs
-- Celery monitor: http://localhost:5555
-- Qdrant: http://localhost:6333/dashboard
+> Chạy một lần duy nhất khi khởi tạo hoặc sau khi có migration mới.
 
-## Sử dụng
+### Bước 5 — Kiểm tra
 
-Upload tài liệu:
+Mở trình duyệt, truy cập:
+
+| URL | Mô tả |
+|---|---|
+| http://localhost:8000/docs | API documentation (Swagger UI) |
+| http://localhost:8000/health | Trạng thái kết nối DB + Qdrant |
+| http://localhost:5555 | Celery Flower — theo dõi task queue |
+| http://localhost:6333/dashboard | Qdrant dashboard |
+
+---
+
+## Cách sử dụng
+
+### 1. Upload tài liệu PDF
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/documents/upload \
-  -F "file=@nghi-dinh.pdf"
+  -F "file=@/path/to/nghi-dinh.pdf"
 ```
 
-Trả về `document_id`, dùng để kiểm tra trạng thái xử lý:
+Response:
+```json
+{
+  "document_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "filename": "nghi-dinh.pdf",
+  "status": "pending"
+}
+```
+
+Hệ thống trả về `202 Accepted` ngay lập tức. Việc xử lý (parse PDF, tạo embedding, lưu Qdrant) chạy nền qua Celery.
+
+### 2. Kiểm tra trạng thái xử lý
+
 ```bash
 curl http://localhost:8000/api/v1/documents/{document_id}/status
 ```
 
-Khi status là `completed` thì có thể đặt câu hỏi:
+```json
+{
+  "document_id": "...",
+  "filename": "nghi-dinh.pdf",
+  "status": "completed",   // pending | processing | completed | failed
+  "chunk_count": 147,
+  "file_size_bytes": 2048000
+}
+```
+
+Polling đến khi `status` là `completed` thì có thể đặt câu hỏi.
+
+### 3. Đặt câu hỏi
+
 ```bash
-curl -X POST http://localhost:8000/api/v1/ask \
+curl -X POST http://localhost:8000/api/v1/query/ask \
   -H "Content-Type: application/json" \
-  -d '{"question": "Mức phạt vi phạm tốc độ là bao nhiêu?"}'
+  -d '{
+    "question": "Mức phạt vi phạm tốc độ trên đường cao tốc là bao nhiêu?",
+    "top_k": 5,
+    "score_threshold": 0.35
+  }'
 ```
 
-Response trả về câu trả lời, `is_grounded` (có dựa trên tài liệu không), và danh sách trích dẫn (file, trang, đoạn văn).
-
-## Cấu trúc thư mục
-
+Response:
+```json
+{
+  "answer": "Theo Nghị định 100/2019/NĐ-CP, Điều 5...",
+  "is_grounded": true,
+  "citations": [
+    {
+      "filename": "nghi-dinh.pdf",
+      "page_number": 12,
+      "chunk_index": 34,
+      "excerpt": "Phạt tiền từ 800.000 đồng đến 1.200.000 đồng..."
+    }
+  ],
+  "model_used": "claude-3-5-haiku-20241022",
+  "usage_tokens": 842
+}
 ```
-src/
-├── api/            # FastAPI routes, schemas, dependency injection
-├── core/
-│   ├── entities/   # Domain models (Document, Chunk, LLMResponse...)
-│   ├── interfaces/ # Abstract interface cho LLM, vector store, storage...
-│   └── services/   # Business logic (chunking, ingestion, query)
-├── infrastructure/ # Implementation cụ thể (OpenAI, Qdrant, Postgres, pypdf)
-└── workers/        # Celery task xử lý ingest bất đồng bộ
+
+Nếu không tìm thấy thông tin: `"is_grounded": false`, hệ thống trả lời từ chối, không gọi LLM.
+
+### 4. Xem lịch sử hỏi-đáp
+
+```bash
+curl "http://localhost:8000/api/v1/query/history?limit=10&offset=0"
 ```
+
+---
+
+## Tất cả API Endpoints
+
+| Method | Endpoint | Mô tả |
+|--------|----------|-------|
+| `POST` | `/api/v1/documents/upload` | Upload PDF, trả về 202 + document_id ngay |
+| `GET` | `/api/v1/documents/{id}/status` | Polling trạng thái xử lý |
+| `GET` | `/api/v1/documents/` | Danh sách tài liệu đã upload |
+| `DELETE` | `/api/v1/documents/{id}` | Xóa tài liệu (DB + Qdrant + file) |
+| `POST` | `/api/v1/query/ask` | Đặt câu hỏi, nhận trả lời + citations (giới hạn 20 req/phút) |
+| `GET` | `/api/v1/query/history` | Lịch sử hỏi-đáp, mới nhất trước |
+| `GET` | `/health` | Trạng thái hệ thống (PostgreSQL + Qdrant) |
+
+---
 
 ## Chạy local (không Docker)
 
-```bash
-pip install -e ".[dev]"
-uvicorn src.api.main:app --reload
+> Yêu cầu: PostgreSQL, Redis, Qdrant đang chạy sẵn trên máy.
 
-# Worker riêng
+```bash
+# Tạo virtualenv
+python -m venv .venv
+.venv\Scripts\activate        # Windows
+# source .venv/bin/activate   # Linux/Mac
+
+# Cài dependencies
+pip install -r requirements.txt
+
+# Chạy API
+uvicorn src.api.main:app --reload --port 8000
+
+# Chạy Celery worker (terminal riêng)
 celery -A src.workers.celery_app worker --loglevel=info -Q ingest
 
-# Test
-pytest --cov=src
+# Chạy migration
+alembic upgrade head
 ```
 
+---
 
-## API Endpoints
+## Chạy Tests
 
-| Method | Endpoint | Mo ta |
-|--------|----------|-------|
-| POST | /api/v1/documents/upload | Upload file PDF, tra ve 202 + document_id |
-| GET  | /api/v1/documents/{id}/status | Polling trang thai xu ly |
-| GET  | /api/v1/documents/ | Danh sach tai lieu da upload |
-| DELETE | /api/v1/documents/{id} | Xoa tai lieu |
-| POST | /api/v1/query/ask | Dat cau hoi, nhan cau tra loi + citations |
+```bash
+# Unit tests
+pytest tests/unit/ -v
 
-## Chay he thong
+# Integration tests (dùng SQLite in-memory, không cần PostgreSQL)
+pytest tests/integration/ -v
 
-1. Copy file cau hinh: cp .env.example .env (dien OPENAI_API_KEY)
-2. Khoi dong services: docker compose up -d
-3. Chay migration: docker compose exec api alembic upgrade head
-4. API docs: http://localhost:8000/docs
-5. Chay tests: docker compose exec api pytest tests/unit/ -v
+# Tất cả tests + coverage report
+pytest --cov=src --cov-report=term-missing
+```
+
+---
+
+## Biến môi trường (.env)
+
+| Biến | Mô tả | Mặc định |
+|---|---|---|
+| `OPENAI_API_KEY` | OpenAI API key (bắt buộc cho embedding) | — |
+| `ANTHROPIC_API_KEY` | Anthropic API key | — |
+| `LLM_PROVIDER` | Provider LLM: `anthropic` / `openai` / `ollama` | `anthropic` |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://...` |
+| `QDRANT_URL` | Qdrant server URL | `http://localhost:6333` |
+| `REDIS_URL` | Redis connection string | `redis://localhost:6379/0` |
+| `CHUNK_SIZE` | Kích thước mỗi chunk (số token) | `512` |
+| `CHUNK_OVERLAP` | Overlap giữa các chunk | `50` |
+| `RETRIEVAL_TOP_K` | Số chunk truy xuất mỗi query | `5` |
+| `RETRIEVAL_SCORE_THRESHOLD` | Ngưỡng similarity tối thiểu (0–1) | `0.35` |
+| `MAX_FILE_SIZE_MB` | Kích thước file tối đa | `50` |
+| `ALLOWED_ORIGINS` | CORS origins (JSON array) | `["*"]` |
