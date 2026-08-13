@@ -59,7 +59,7 @@ async def test_ask(client: httpx.AsyncClient, question: str) -> None:
     """Test the Q&A endpoint with a sample question."""
     print(f"\n  ❓ Asking: {question}")
     response = await client.post(
-        f"{API_BASE}/ask",
+        f"{API_BASE}/query/ask",
         json={"question": question, "top_k": 3},
         timeout=60.0,
     )

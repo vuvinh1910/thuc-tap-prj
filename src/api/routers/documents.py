@@ -23,11 +23,19 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 
-ALLOWED_CONTENT_TYPES = {
+# Flexible content type matching — browsers may send with or without charset
+ALLOWED_CONTENT_PREFIXES = [
     "application/pdf",
     "text/plain",
-    "text/plain; charset=utf-8",
-}
+]
+
+
+def _is_allowed_content_type(content_type: str | None) -> bool:
+    """Check if the content type is allowed, handling charset variants."""
+    if not content_type:
+        return False
+    ct = content_type.lower().strip()
+    return any(ct.startswith(prefix) for prefix in ALLOWED_CONTENT_PREFIXES)
 
 
 def _to_status_response(doc: Document) -> DocumentStatusResponse:
@@ -61,8 +69,8 @@ async def upload_document(
     The file is saved and an async ingest job is queued.
     Returns 202 immediately with a document_id for status polling.
     """
-    # Validate content type
-    if file.content_type not in ALLOWED_CONTENT_TYPES:
+    # Validate content type (flexible matching)
+    if not _is_allowed_content_type(file.content_type):
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
             detail=f"Chỉ hỗ trợ PDF và text. Nhận được: {file.content_type}",
@@ -74,6 +82,12 @@ async def upload_document(
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=f"File quá lớn. Tối đa {settings.max_file_size_mb}MB.",
+        )
+
+    if len(content) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File rỗng. Vui lòng chọn file có nội dung.",
         )
 
     # Save file via injected storage

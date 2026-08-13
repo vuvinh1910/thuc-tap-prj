@@ -56,7 +56,7 @@ class TestChunkingServiceFixedSize:
 
     def test_short_text_returns_single_chunk(self, doc_id):
         service = ChunkingService(
-            ChunkingConfig(strategy=ChunkingStrategy.FIXED_SIZE, chunk_size=512)
+            ChunkingConfig(strategy=ChunkingStrategy.FIXED_SIZE, chunk_size=512, min_chunk_size=0)
         )
         short = "Mức phạt là 500.000 đồng."
         chunks = service.split(short, doc_id)
@@ -88,7 +88,7 @@ class TestChunkingServiceRecursive:
 
 class TestChunkingServiceWithPages:
     def test_split_with_pages_preserves_page_number(self, doc_id):
-        service = ChunkingService(ChunkingConfig(chunk_size=100, overlap=10))
+        service = ChunkingService(ChunkingConfig(chunk_size=100, overlap=10, min_chunk_size=0))
         pages = [
             (1, "Điều 1. Mức phạt đối với xe ô tô vi phạm tốc độ từ 10-20 km/h là 3 triệu đồng."),
             (2, "Điều 2. Mức phạt đối với xe máy vi phạm tốc độ từ 5-10 km/h là 500 nghìn đồng."),
@@ -99,7 +99,7 @@ class TestChunkingServiceWithPages:
         assert 2 in page_numbers
 
     def test_split_with_pages_global_index(self, doc_id):
-        service = ChunkingService(ChunkingConfig(chunk_size=100, overlap=10))
+        service = ChunkingService(ChunkingConfig(chunk_size=100, overlap=10, min_chunk_size=0))
         pages = [(1, SAMPLE_TEXT[:500]), (2, SAMPLE_TEXT[500:1000])]
         chunks = service.split_with_pages(pages, doc_id)
         indices = [c.chunk_index for c in chunks]

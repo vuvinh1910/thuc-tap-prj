@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="RAG Q&A Bot — Chatbot hỏi đáp tài liệu pháp lý Việt Nam. Upload nghị định, đặt câu hỏi, nhận trả lời kèm trích dẫn nguồn.">
+    <title>RAG Q&A Bot — Hỏi đáp Pháp luật</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        /* ── CSS Reset & Variables ──────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --bg-primary: #0a0e1a;
+            --bg-secondary: #111827;
+            --bg-card: rgba(17, 24, 39, 0.8);
+            --bg-card-hover: rgba(31, 41, 55, 0.9);
+            --bg-input: rgba(17, 24, 39, 0.6);
+            --bg-glass: rgba(255, 255, 255, 0.03);
+            --border: rgba(255, 255, 255, 0.08);
+            --border-focus: rgba(99, 102, 241, 0.5);
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --accent: #6366f1;
+            --accent-light: #818cf8;
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --success: #10b981;
+            --success-bg: rgba(16, 185, 129, 0.1);
+            --warning: #f59e0b;
+            --warning-bg: rgba(245, 158, 11, 0.1);
+            --error: #ef4444;
+            --error-bg: rgba(239, 68, 68, 0.1);
+            --info: #3b82f6;
+            --info-bg: rgba(59, 130, 246, 0.1);
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --shadow-sm: 0 1px 3px rgba(0,0,0,0.3);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.4);
+            --shadow-lg: 0 8px 32px rgba(0,0,0,0.5);
+            --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ── Animated Background ────────────────────────────────── */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background:
+                radial-gradient(ellipse 80% 50% at 20% 0%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 40% at 80% 100%, rgba(16, 185, 129, 0.06) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* ── Layout ───────────────────────────────────────────── */
+        .app-container {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        /* ── Header ──────────────────────────────────────────── */
+        .header {
+            background: rgba(10, 14, 26, 0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+            padding: 0 24px;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .logo-icon {
+            width: 36px;
+            height: 36px;
+            background: linear-gradient(135deg, var(--accent), #a855f7);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .logo-text {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.5px;
+        }
+
+        .logo-badge {
+            font-size: 10px;
+            font-weight: 600;
+            background: var(--accent-glow);
+            color: var(--accent-light);
+            padding: 2px 8px;
+            border-radius: 20px;
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 4px;
+        }
+
+        .nav-tab {
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .nav-tab:hover { background: var(--bg-glass); color: var(--text-primary); }
+        .nav-tab.active { background: var(--accent-glow); color: var(--accent-light); }
+
+        .health-indicator {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            background: var(--success);
+            box-shadow: 0 0 8px var(--success);
+            animation: pulse-glow 2s infinite;
+        }
+
+        .health-indicator.error { background: var(--error); box-shadow: 0 0 8px var(--error); }
+        .health-indicator.unknown { background: var(--text-muted); box-shadow: none; }
+
+        @keyframes pulse-glow {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        /* ── Main Content ────────────────────────────────────── */
+        .main-content {
+            flex: 1;
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px;
+            width: 100%;
+        }
+
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* ── Chat Tab ────────────────────────────────────────── */
+        .chat-layout {
+            display: grid;
+            grid-template-columns: 1fr 340px;
+            gap: 24px;
+            height: calc(100vh - 136px);
+        }
+
+        .chat-main {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-card);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            scroll-behavior: smooth;
+        }
+
+        .chat-messages::-webkit-scrollbar { width: 6px; }
+        .chat-messages::-webkit-scrollbar-track { background: transparent; }
+        .chat-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+
+        .chat-empty {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            flex: 1;
+            text-align: center;
+            gap: 16px;
+            padding: 40px;
+        }
+
+        .chat-empty-icon {
+            font-size: 48px;
+            opacity: 0.6;
+        }
+
+        .chat-empty h3 {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .chat-empty p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            max-width: 400px;
+        }
+
+        .suggestion-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            justify-content: center;
+            margin-top: 8px;
+        }
+
+        .suggestion-chip {
+            padding: 8px 14px;
+            background: var(--bg-glass);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition);
+            font-family: inherit;
+        }
+
+        .suggestion-chip:hover {
+            background: var(--accent-glow);
+            border-color: rgba(99,102,241,0.3);
+            color: var(--accent-light);
+        }
+
+        /* ── Message Bubbles ────────────────────────────────── */
+        .message { display: flex; gap: 12px; max-width: 85%; animation: fadeSlideUp 0.3s ease; }
+        .message.user { align-self: flex-end; flex-direction: row-reverse; }
+        .message.assistant { align-self: flex-start; }
+
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message-avatar {
+            width: 32px; height: 32px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .message.user .message-avatar {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+        }
+
+        .message.assistant .message-avatar {
+            background: linear-gradient(135deg, #10b981, #059669);
+        }
+
+        .message-body {
+            background: var(--bg-glass);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+        }
+
+        .message.user .message-body {
+            background: rgba(99, 102, 241, 0.12);
+            border-color: rgba(99, 102, 241, 0.2);
+        }
+
+        .message-text {
+            font-size: 14px;
+            line-height: 1.7;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .message-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .grounded-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .grounded-badge.yes { background: var(--success-bg); color: var(--success); }
+        .grounded-badge.no { background: var(--warning-bg); color: var(--warning); }
+
+        /* ── Citations ─────────────────────────────────────── */
+        .citations-list {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .citation-item {
+            background: rgba(59, 130, 246, 0.06);
+            border: 1px solid rgba(59, 130, 246, 0.12);
+            border-radius: var(--radius-sm);
+            padding: 8px 12px;
+            font-size: 12px;
+            cursor: default;
+            transition: var(--transition);
+        }
+
+        .citation-item:hover {
+            background: rgba(59, 130, 246, 0.1);
+            border-color: rgba(59, 130, 246, 0.2);
+        }
+
+        .citation-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 500;
+            color: var(--info);
+            margin-bottom: 4px;
+        }
+
+        .citation-excerpt {
+            color: var(--text-secondary);
+            font-size: 11px;
+            line-height: 1.5;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        /* ── Chat Input ─────────────────────────────────────── */
+        .chat-input-area {
+            padding: 16px 24px;
+            border-top: 1px solid var(--border);
+            background: rgba(17, 24, 39, 0.5);
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            color: var(--text-primary);
+            font-family: inherit;
+            font-size: 14px;
+            resize: none;
+            min-height: 44px;
+            max-height: 120px;
+            outline: none;
+            transition: var(--transition);
+        }
+
+        .chat-input:focus { border-color: var(--border-focus); box-shadow: 0 0 0 3px var(--accent-glow); }
+        .chat-input::placeholder { color: var(--text-muted); }
+
+        .send-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-md);
+            border: none;
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+            flex-shrink: 0;
+        }
+
+        .send-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(99,102,241,0.4); }
+        .send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* ── Chat Sidebar (Document List) ─────────────────── */
+        .chat-sidebar {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sidebar-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .sidebar-card-header {
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .sidebar-card-header h3 {
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sidebar-card-body {
+            padding: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .sidebar-card-body::-webkit-scrollbar { width: 4px; }
+        .sidebar-card-body::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 2px; }
+
+        .doc-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 10px;
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+            cursor: default;
+        }
+
+        .doc-item:hover { background: var(--bg-glass); }
+
+        .doc-icon {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            background: rgba(239, 68, 68, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .doc-info { flex: 1; min-width: 0; }
+
+        .doc-name {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .doc-meta {
+            font-size: 11px;
+            color: var(--text-muted);
+            display: flex;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.completed { background: var(--success); }
+        .status-dot.pending, .status-dot.processing { background: var(--warning); }
+        .status-dot.failed { background: var(--error); }
+
+        .doc-delete-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            border-radius: 4px;
+            font-size: 14px;
+            opacity: 0;
+            transition: var(--transition);
+        }
+
+        .doc-item:hover .doc-delete-btn { opacity: 1; }
+        .doc-delete-btn:hover { color: var(--error); background: var(--error-bg); }
+
+        .empty-state {
+            text-align: center;
+            padding: 20px;
+            color: var(--text-muted);
+            font-size: 12px;
+        }
+
+        /* ── Documents Tab ──────────────────────────────────── */
+        .upload-section {
+            margin-bottom: 24px;
+        }
+
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius-lg);
+            padding: 48px;
+            text-align: center;
+            transition: var(--transition);
+            cursor: pointer;
+            background: var(--bg-glass);
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background: var(--accent-glow);
+        }
+
+        .upload-zone-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+            opacity: 0.7;
+        }
+
+        .upload-zone h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .upload-zone p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .upload-zone input[type="file"] { display: none; }
+
+        .upload-progress {
+            margin-top: 16px;
+            display: none;
+        }
+
+        .upload-progress.active { display: block; }
+
+        .progress-bar-outer {
+            height: 6px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-bar-inner {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent), #a855f7);
+            border-radius: 3px;
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+
+        .progress-text {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        /* ── Documents Table ──────────────────────────────── */
+        .docs-table-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+        }
+
+        .docs-table-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .docs-table-header h2 {
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .refresh-btn {
+            background: var(--bg-glass);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 12px;
+            font-family: inherit;
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .refresh-btn:hover { background: var(--accent-glow); color: var(--accent-light); border-color: rgba(99,102,241,0.3); }
+
+        .docs-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .docs-table th {
+            padding: 10px 20px;
+            text-align: left;
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .docs-table td {
+            padding: 12px 20px;
+            font-size: 13px;
+            border-bottom: 1px solid var(--border);
+            vertical-align: middle;
+        }
+
+        .docs-table tr:last-child td { border-bottom: none; }
+        .docs-table tr:hover td { background: var(--bg-glass); }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .status-badge.completed { background: var(--success-bg); color: var(--success); }
+        .status-badge.pending { background: var(--warning-bg); color: var(--warning); }
+        .status-badge.processing { background: var(--info-bg); color: var(--info); }
+        .status-badge.failed { background: var(--error-bg); color: var(--error); }
+
+        .action-btn {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            font-size: 12px;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+
+        .action-btn:hover { border-color: var(--error); color: var(--error); background: var(--error-bg); }
+
+        /* ── History Tab ──────────────────────────────────── */
+        .history-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .history-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 16px 20px;
+            transition: var(--transition);
+        }
+
+        .history-item:hover { border-color: rgba(99,102,241,0.2); }
+
+        .history-question {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--accent-light);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        .history-answer {
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 3;
+            -webkit-box-orient: vertical;
+        }
+
+        .history-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 10px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* ── Loading Spinner ──────────────────────────────── */
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            padding: 4px 0;
+        }
+
+        .typing-dot {
+            width: 6px; height: 6px;
+            background: var(--text-muted);
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
+
+        /* ── Toast Notifications ────────────────────────── */
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            right: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1000;
+        }
+
+        .toast {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 12px 16px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: var(--shadow-lg);
+            animation: slideInRight 0.3s ease;
+            min-width: 280px;
+        }
+
+        .toast.success { border-left: 3px solid var(--success); }
+        .toast.error { border-left: 3px solid var(--error); }
+        .toast.info { border-left: 3px solid var(--info); }
+
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(100px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        /* ── Responsive ──────────────────────────────────── */
+        @media (max-width: 900px) {
+            .chat-layout { grid-template-columns: 1fr; }
+            .chat-sidebar { display: none; }
+            .header-inner { gap: 8px; }
+            .nav-tab span.label { display: none; }
+        }
+
+        @media (max-width: 600px) {
+            .main-content { padding: 12px; }
+            .chat-messages { padding: 12px; }
+            .upload-zone { padding: 24px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- ── Header ──────────────────────────────────── -->
+        <header class="header">
+            <div class="header-inner">
+                <div class="logo">
+                    <div class="logo-icon">⚖️</div>
+                    <span class="logo-text">RAG Q&A Bot</span>
+                    <span class="logo-badge">v0.2</span>
+                </div>
+                <nav class="nav-tabs">
+                    <button class="nav-tab active" data-tab="chat" id="nav-chat">
+                        💬 <span class="label">Hỏi đáp</span>
+                    </button>
+                    <button class="nav-tab" data-tab="documents" id="nav-documents">
+                        📄 <span class="label">Tài liệu</span>
+                    </button>
+                    <button class="nav-tab" data-tab="history" id="nav-history">
+                        🕐 <span class="label">Lịch sử</span>
+                    </button>
+                    <div class="nav-tab" style="cursor: default; gap: 8px;">
+                        <div class="health-indicator unknown" id="health-dot"></div>
+                        <span class="label" id="health-text" style="font-size: 11px;">Đang kiểm tra...</span>
+                    </div>
+                </nav>
+            </div>
+        </header>
+
+        <!-- ── Main Content ──────────────────────────── -->
+        <main class="main-content">
+            <!-- Chat Tab -->
+            <div class="tab-content active" id="tab-chat">
+                <div class="chat-layout">
+                    <div class="chat-main">
+                        <div class="chat-messages" id="chat-messages">
+                            <div class="chat-empty" id="chat-empty">
+                                <div class="chat-empty-icon">⚖️</div>
+                                <h3>Xin chào! Tôi là trợ lý pháp lý AI</h3>
+                                <p>Hãy upload tài liệu PDF nghị định rồi đặt câu hỏi. Tôi sẽ trả lời dựa trên nội dung tài liệu kèm trích dẫn nguồn chính xác.</p>
+                                <div class="suggestion-chips">
+                                    <button class="suggestion-chip" onclick="askSuggestion(this)">Mức phạt vi phạm tốc độ là bao nhiêu?</button>
+                                    <button class="suggestion-chip" onclick="askSuggestion(this)">Vượt đèn đỏ bị phạt bao nhiêu tiền?</button>
+                                    <button class="suggestion-chip" onclick="askSuggestion(this)">Không đội mũ bảo hiểm bị xử phạt thế nào?</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="chat-input-area">
+                            <div class="chat-input-wrapper">
+                                <textarea class="chat-input" id="chat-input" placeholder="Nhập câu hỏi về tài liệu pháp lý..." rows="1"></textarea>
+                                <button class="send-btn" id="send-btn" onclick="sendQuestion()" title="Gửi câu hỏi">➤</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <aside class="chat-sidebar">
+                        <div class="sidebar-card">
+                            <div class="sidebar-card-header">
+                                <h3>📄 Tài liệu đã tải</h3>
+                                <button class="refresh-btn" onclick="loadDocuments()" title="Làm mới">🔄</button>
+                            </div>
+                            <div class="sidebar-card-body" id="sidebar-docs">
+                                <div class="empty-state">Chưa có tài liệu nào</div>
+                            </div>
+                        </div>
+                        <div class="sidebar-card">
+                            <div class="sidebar-card-header">
+                                <h3>📤 Upload nhanh</h3>
+                            </div>
+                            <div class="sidebar-card-body" style="padding: 16px;">
+                                <div class="upload-zone" id="sidebar-upload-zone" style="padding: 20px; border-width: 1px;">
+                                    <div style="font-size: 24px; margin-bottom: 8px;">📁</div>
+                                    <p style="font-size: 12px;">Kéo file PDF vào đây</p>
+                                    <input type="file" accept=".pdf,.txt" id="sidebar-file-input">
+                                </div>
+                                <div class="upload-progress" id="sidebar-upload-progress">
+                                    <div class="progress-bar-outer"><div class="progress-bar-inner" id="sidebar-progress-bar"></div></div>
+                                    <div class="progress-text" id="sidebar-progress-text">Đang xử lý...</div>
+                                </div>
+                            </div>
+                        </div>
+                    </aside>
+                </div>
+            </div>
+
+            <!-- Documents Tab -->
+            <div class="tab-content" id="tab-documents">
+                <div class="upload-section">
+                    <div class="upload-zone" id="main-upload-zone">
+                        <div class="upload-zone-icon">📤</div>
+                        <h3>Upload tài liệu pháp lý</h3>
+                        <p>Kéo và thả file PDF hoặc nhấp để chọn file (tối đa 50MB)</p>
+                        <input type="file" accept=".pdf,.txt" id="main-file-input" multiple>
+                    </div>
+                    <div class="upload-progress" id="main-upload-progress">
+                        <div class="progress-bar-outer"><div class="progress-bar-inner" id="main-progress-bar"></div></div>
+                        <div class="progress-text" id="main-progress-text">Đang upload...</div>
+                    </div>
+                </div>
+
+                <div class="docs-table-card">
+                    <div class="docs-table-header">
+                        <h2>📋 Danh sách tài liệu</h2>
+                        <button class="refresh-btn" onclick="loadDocuments()">🔄 Làm mới</button>
+                    </div>
+                    <div id="docs-table-body">
+                        <table class="docs-table">
+                            <thead>
+                                <tr>
+                                    <th>Tên file</th>
+                                    <th>Trạng thái</th>
+                                    <th>Số đoạn</th>
+                                    <th>Kích thước</th>
+                                    <th>Ngày tải</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="docs-tbody">
+                                <tr><td colspan="6" class="empty-state">Đang tải danh sách...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- History Tab -->
+            <div class="tab-content" id="tab-history">
+                <div class="docs-table-card" style="margin-bottom: 16px;">
+                    <div class="docs-table-header">
+                        <h2>🕐 Lịch sử hỏi đáp</h2>
+                        <button class="refresh-btn" onclick="loadHistory()">🔄 Làm mới</button>
+                    </div>
+                </div>
+                <div class="history-list" id="history-list">
+                    <div class="empty-state">Đang tải lịch sử...</div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script>
+        // ── API Configuration ──────────────────────────────────
+        const API_BASE = '/api/v1';
+
+        // ── Tab Navigation ─────────────────────────────────────
+        document.querySelectorAll('.nav-tab[data-tab]').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById(`tab-${tab.dataset.tab}`).classList.add('active');
+
+                if (tab.dataset.tab === 'documents') loadDocuments();
+                if (tab.dataset.tab === 'history') loadHistory();
+            });
+        });
+
+        // ── Toast System ───────────────────────────────────────
+        function showToast(message, type = 'info') {
+            const icons = { success: '✅', error: '❌', info: 'ℹ️' };
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.innerHTML = `<span>${icons[type] || 'ℹ️'}</span><span>${message}</span>`;
+            container.appendChild(toast);
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateX(100px)'; setTimeout(() => toast.remove(), 300); }, 4000);
+        }
+
+        // ── Health Check ───────────────────────────────────────
+        async function checkHealth() {
+            const dot = document.getElementById('health-dot');
+            const text = document.getElementById('health-text');
+            try {
+                const res = await fetch('/health');
+                const data = await res.json();
+                dot.className = 'health-indicator ' + (data.status === 'healthy' ? '' : 'error');
+                text.textContent = data.status === 'healthy' ? 'Hệ thống OK' : 'Có lỗi';
+            } catch {
+                dot.className = 'health-indicator error';
+                text.textContent = 'Mất kết nối';
+            }
+        }
+        checkHealth();
+        setInterval(checkHealth, 30000);
+
+        // ── Documents Management ───────────────────────────────
+        let documents = [];
+
+        async function loadDocuments() {
+            try {
+                const res = await fetch(`${API_BASE}/documents/?limit=100`);
+                const data = await res.json();
+                documents = data.items || [];
+                renderDocsTable();
+                renderSidebarDocs();
+            } catch (e) {
+                console.error('Load documents failed:', e);
+            }
+        }
+
+        function formatBytes(bytes) {
+            if (!bytes) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function formatDate(dateStr) {
+            if (!dateStr) return '-';
+            const d = new Date(dateStr);
+            return d.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        }
+
+        function renderDocsTable() {
+            const tbody = document.getElementById('docs-tbody');
+            if (!documents.length) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty-state">Chưa có tài liệu nào. Upload file PDF ở phía trên.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = documents.map(doc => `
+                <tr>
+                    <td><span style="display: flex; align-items: center; gap: 8px;">📄 ${escapeHtml(doc.filename)}</span></td>
+                    <td><span class="status-badge ${doc.status}"><span class="status-dot ${doc.status}"></span> ${statusLabel(doc.status)}</span></td>
+                    <td>${doc.chunk_count || '-'}</td>
+                    <td>${formatBytes(doc.file_size_bytes)}</td>
+                    <td>${formatDate(doc.created_at)}</td>
+                    <td><button class="action-btn" onclick="deleteDocument('${doc.document_id}')">🗑️ Xóa</button></td>
+                </tr>
+            `).join('');
+        }
+
+        function renderSidebarDocs() {
+            const el = document.getElementById('sidebar-docs');
+            if (!documents.length) {
+                el.innerHTML = '<div class="empty-state">Chưa có tài liệu nào</div>';
+                return;
+            }
+            el.innerHTML = documents.map(doc => `
+                <div class="doc-item">
+                    <div class="doc-icon">📄</div>
+                    <div class="doc-info">
+                        <div class="doc-name">${escapeHtml(doc.filename)}</div>
+                        <div class="doc-meta">
+                            <span><span class="status-dot ${doc.status}"></span> ${statusLabel(doc.status)}</span>
+                            ${doc.chunk_count ? `<span>${doc.chunk_count} đoạn</span>` : ''}
+                        </div>
+                    </div>
+                    <button class="doc-delete-btn" onclick="deleteDocument('${doc.document_id}')" title="Xóa">✕</button>
+                </div>
+            `).join('');
+        }
+
+        function statusLabel(status) {
+            const labels = { pending: 'Đang chờ', processing: 'Đang xử lý', completed: 'Hoàn thành', failed: 'Lỗi' };
+            return labels[status] || status;
+        }
+
+        async function deleteDocument(docId) {
+            if (!confirm('Bạn có chắc chắn muốn xóa tài liệu này?')) return;
+            try {
+                await fetch(`${API_BASE}/documents/${docId}`, { method: 'DELETE' });
+                showToast('Đã xóa tài liệu', 'success');
+                loadDocuments();
+            } catch (e) {
+                showToast('Lỗi khi xóa tài liệu', 'error');
+            }
+        }
+
+        // ── File Upload ────────────────────────────────────────
+        function setupUploadZone(zoneId, inputId, progressId, barId, textId) {
+            const zone = document.getElementById(zoneId);
+            const input = document.getElementById(inputId);
+
+            zone.addEventListener('click', () => input.click());
+            zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+            zone.addEventListener('drop', e => {
+                e.preventDefault();
+                zone.classList.remove('dragover');
+                if (e.dataTransfer.files.length) uploadFiles(e.dataTransfer.files, progressId, barId, textId);
+            });
+            input.addEventListener('change', () => {
+                if (input.files.length) uploadFiles(input.files, progressId, barId, textId);
+                input.value = '';
+            });
+        }
+
+        async function uploadFiles(files, progressId, barId, textId) {
+            const progressEl = document.getElementById(progressId);
+            const barEl = document.getElementById(barId);
+            const textEl = document.getElementById(textId);
+
+            progressEl.classList.add('active');
+
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                textEl.textContent = `Đang upload: ${file.name} (${i + 1}/${files.length})`;
+                barEl.style.width = '30%';
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const res = await fetch(`${API_BASE}/documents/upload`, { method: 'POST', body: formData });
+                    barEl.style.width = '70%';
+
+                    if (!res.ok) {
+                        const err = await res.json();
+                        throw new Error(err.detail || 'Upload thất bại');
+                    }
+
+                    const data = await res.json();
+                    barEl.style.width = '100%';
+                    textEl.textContent = `✅ ${file.name} — Đang xử lý...`;
+                    showToast(`Upload thành công: ${file.name}`, 'success');
+
+                    // Poll for completion
+                    pollDocumentStatus(data.document_id);
+                } catch (e) {
+                    showToast(`Lỗi upload ${file.name}: ${e.message}`, 'error');
+                    textEl.textContent = `❌ Lỗi: ${e.message}`;
+                }
+            }
+
+            setTimeout(() => {
+                progressEl.classList.remove('active');
+                barEl.style.width = '0%';
+                loadDocuments();
+            }, 2000);
+        }
+
+        async function pollDocumentStatus(docId) {
+            const maxAttempts = 60;
+            for (let i = 0; i < maxAttempts; i++) {
+                await new Promise(r => setTimeout(r, 3000));
+                try {
+                    const res = await fetch(`${API_BASE}/documents/${docId}/status`);
+                    const data = await res.json();
+                    if (data.status === 'completed') {
+                        showToast(`✅ ${data.filename}: ${data.chunk_count} đoạn đã sẵn sàng`, 'success');
+                        loadDocuments();
+                        return;
+                    } else if (data.status === 'failed') {
+                        showToast(`❌ ${data.filename}: ${data.error_message || 'Xử lý thất bại'}`, 'error');
+                        loadDocuments();
+                        return;
+                    }
+                } catch { /* continue polling */ }
+            }
+        }
+
+        setupUploadZone('main-upload-zone', 'main-file-input', 'main-upload-progress', 'main-progress-bar', 'main-progress-text');
+        setupUploadZone('sidebar-upload-zone', 'sidebar-file-input', 'sidebar-upload-progress', 'sidebar-progress-bar', 'sidebar-progress-text');
+
+        // ── Chat / Q&A ─────────────────────────────────────────
+        const chatInput = document.getElementById('chat-input');
+        const chatMessages = document.getElementById('chat-messages');
+
+        chatInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendQuestion();
+            }
+        });
+
+        chatInput.addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        });
+
+        function askSuggestion(el) {
+            chatInput.value = el.textContent;
+            sendQuestion();
+        }
+
+        async function sendQuestion() {
+            const question = chatInput.value.trim();
+            if (!question) return;
+
+            // Remove empty state
+            const emptyState = document.getElementById('chat-empty');
+            if (emptyState) emptyState.remove();
+
+            // Add user message
+            appendMessage('user', question);
+            chatInput.value = '';
+            chatInput.style.height = 'auto';
+
+            // Add typing indicator
+            const typingEl = appendTypingIndicator();
+
+            // Disable input
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.disabled = true;
+            chatInput.disabled = true;
+
+            try {
+                const res = await fetch(`${API_BASE}/query/ask`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question, top_k: 5, score_threshold: 0.35 }),
+                });
+
+                typingEl.remove();
+
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Lỗi xử lý');
+                }
+
+                const data = await res.json();
+                appendMessage('assistant', data.answer, {
+                    isGrounded: data.is_grounded,
+                    citations: data.citations || [],
+                    model: data.model_used,
+                    tokens: data.usage_tokens,
+                });
+            } catch (e) {
+                typingEl.remove();
+                appendMessage('assistant', `⚠️ Lỗi: ${e.message}. Vui lòng thử lại.`);
+                showToast(e.message, 'error');
+            } finally {
+                sendBtn.disabled = false;
+                chatInput.disabled = false;
+                chatInput.focus();
+            }
+        }
+
+        function appendMessage(role, text, meta = null) {
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+
+            let metaHtml = '';
+            if (meta) {
+                const groundedClass = meta.isGrounded ? 'yes' : 'no';
+                const groundedText = meta.isGrounded ? '✓ Có nguồn' : '⚠ Không tìm thấy nguồn';
+                metaHtml = `
+                    <div class="message-meta">
+                        <span class="grounded-badge ${groundedClass}">${groundedText}</span>
+                        ${meta.model ? `<span>🤖 ${escapeHtml(meta.model)}</span>` : ''}
+                        ${meta.tokens ? `<span>📊 ${meta.tokens} tokens</span>` : ''}
+                    </div>
+                `;
+                if (meta.citations && meta.citations.length > 0) {
+                    metaHtml += `<div class="citations-list">`;
+                    meta.citations.forEach((c, i) => {
+                        metaHtml += `
+                            <div class="citation-item">
+                                <div class="citation-header">📖 [${i + 1}] ${escapeHtml(c.filename)} — Trang ${c.page_number}, Đoạn ${c.chunk_index}</div>
+                                <div class="citation-excerpt">${escapeHtml(c.excerpt)}</div>
+                            </div>
+                        `;
+                    });
+                    metaHtml += `</div>`;
+                }
+            }
+
+            msg.innerHTML = `
+                <div class="message-avatar">${role === 'user' ? '👤' : '⚖️'}</div>
+                <div class="message-body">
+                    <div class="message-text">${escapeHtml(text)}</div>
+                    ${metaHtml}
+                </div>
+            `;
+
+            chatMessages.appendChild(msg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return msg;
+        }
+
+        function appendTypingIndicator() {
+            const msg = document.createElement('div');
+            msg.className = 'message assistant';
+            msg.id = 'typing-indicator';
+            msg.innerHTML = `
+                <div class="message-avatar">⚖️</div>
+                <div class="message-body">
+                    <div class="typing-indicator">
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                        <div class="typing-dot"></div>
+                    </div>
+                </div>
+            `;
+            chatMessages.appendChild(msg);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+            return msg;
+        }
+
+        // ── History ────────────────────────────────────────────
+        async function loadHistory() {
+            try {
+                const res = await fetch(`${API_BASE}/query/history?limit=50`);
+                const data = await res.json();
+                renderHistory(data);
+            } catch (e) {
+                document.getElementById('history-list').innerHTML = '<div class="empty-state">Lỗi tải lịch sử</div>';
+            }
+        }
+
+        function renderHistory(records) {
+            const el = document.getElementById('history-list');
+            if (!records.length) {
+                el.innerHTML = '<div class="empty-state" style="padding:40px;">Chưa có lịch sử hỏi đáp nào. Hãy đặt câu hỏi đầu tiên!</div>';
+                return;
+            }
+            el.innerHTML = records.map(r => `
+                <div class="history-item">
+                    <div class="history-question">❓ ${escapeHtml(r.question)}</div>
+                    <div class="history-answer">${escapeHtml(r.answer)}</div>
+                    <div class="history-meta">
+                        <span class="grounded-badge ${r.is_grounded ? 'yes' : 'no'}">${r.is_grounded ? '✓ Có nguồn' : '⚠ Không nguồn'}</span>
+                        <span>🤖 ${escapeHtml(r.model_used || '-')}</span>
+                        <span>📊 ${r.usage_tokens} tokens</span>
+                        <span>📚 ${r.citation_count} trích dẫn</span>
+                        <span>📅 ${formatDate(r.created_at)}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // ── Utils ──────────────────────────────────────────────
+        function escapeHtml(str) {
+            if (!str) return '';
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        // ── Init ───────────────────────────────────────────────
+        loadDocuments();
+    </script>
+</body>
+</html>

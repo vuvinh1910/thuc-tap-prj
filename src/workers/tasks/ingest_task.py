@@ -49,6 +49,44 @@ def _build_ingestion_service():
     ), session
 
 
+async def _run_ingestion(document_id: str, filename: str, file_path: str) -> dict:
+    """
+    Async helper: update status to PROCESSING, then run the full ingest pipeline.
+    Properly closes the DB session in all cases.
+    """
+    from src.core.entities.document import Document, DocumentStatus
+
+    ingestion_service, session = _build_ingestion_service()
+
+    try:
+        # Update document status to PROCESSING in the database
+        from src.infrastructure.database.document_repo import PostgresDocumentRepository
+        doc_repo = PostgresDocumentRepository(session)
+        await doc_repo.update_status(
+            document_id=uuid.UUID(document_id),
+            status=DocumentStatus.PROCESSING,
+        )
+
+        # Build a Document entity for the ingest pipeline
+        doc = Document(
+            id=uuid.UUID(document_id),
+            filename=filename,
+            file_path=file_path,
+            status=DocumentStatus.PROCESSING,
+        )
+
+        await ingestion_service.ingest(doc)
+        return {"status": "completed", "document_id": document_id}
+
+    finally:
+        await session.close()
+        
+        # Dispose global engine pool to prevent "attached to a different loop" errors
+        # on subsequent Celery tasks running in new event loops.
+        from src.infrastructure.database.session import engine
+        await engine.dispose()
+
+
 @celery_app.task(
     name="src.workers.tasks.ingest_task.ingest_document",
     bind=True,
@@ -68,31 +106,15 @@ def ingest_document(self, document_id: str, filename: str, file_path: str) -> di
     Returns:
         dict with status and chunk_count on success.
     """
-    from src.core.entities.document import Document, DocumentStatus
-
     logger.info("ingest_task_started", document_id=document_id, filename=filename)
 
-    doc = Document(
-        id=uuid.UUID(document_id),
-        filename=filename,
-        file_path=file_path,
-        status=DocumentStatus.PROCESSING,
-    )
-
-    ingestion_service, session = _build_ingestion_service()
-
     try:
-        # Run async ingestion in the sync Celery context
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(ingestion_service.ingest(doc))
-        finally:
-            loop.run_until_complete(session.close())
-            loop.close()
-
+        # Use asyncio.run() for clean event loop management (no memory leak)
+        result = asyncio.run(
+            _run_ingestion(document_id, filename, file_path)
+        )
         logger.info("ingest_task_completed", document_id=document_id)
-        return {"status": "completed", "document_id": document_id}
+        return result
 
     except Exception as exc:
         logger.error("ingest_task_failed", document_id=document_id, error=str(exc))

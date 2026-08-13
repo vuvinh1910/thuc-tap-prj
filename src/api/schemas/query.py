@@ -2,6 +2,7 @@
 API request/response schemas for query (Q&A) endpoints.
 """
 
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -67,7 +68,6 @@ class QueryHistoryResponse(BaseModel):
     model_used: str
     usage_tokens: int
     citation_count: int
-    created_at: str
+    created_at: datetime
 
-    class Config:
-        json_encoders = {__import__("datetime").datetime: lambda v: v.isoformat()}
+    model_config = {"json_encoders": {datetime: lambda v: v.isoformat()}}

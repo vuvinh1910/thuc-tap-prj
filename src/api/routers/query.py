@@ -8,7 +8,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 
 from src.api.dependencies import QueryHistoryRepoDep, QueryServiceDep
-from src.api.main import limiter
+from src.api.rate_limit import limiter
 from src.api.schemas.query import AskRequest, AskResponse, CitationResponse, QueryHistoryResponse
 
 logger = structlog.get_logger(__name__)

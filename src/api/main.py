@@ -9,18 +9,16 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
+from src.api.rate_limit import limiter
 from src.api.routers import documents, query
 from src.config.settings import get_settings
 
 logger = structlog.get_logger(__name__)
 settings = get_settings()
-
-# Rate limiter — keyed by client IP
-limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
 
 
 @asynccontextmanager
@@ -73,6 +71,18 @@ def create_app() -> FastAPI:
     # ── Routers ─────────────────────────────────────────────────────────────
     app.include_router(documents.router, prefix="/api/v1")
     app.include_router(query.router, prefix="/api/v1")
+
+    # ── Static Files (Frontend) ─────────────────────────────────────────────
+    import os
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    if os.path.isdir(static_dir):
+        app.mount("/static", StaticFiles(directory=static_dir, html=True), name="static")
+
+        @app.get("/", include_in_schema=False)
+        async def serve_frontend():
+            """Serve the frontend SPA at root URL."""
+            from fastapi.responses import FileResponse
+            return FileResponse(os.path.join(static_dir, "index.html"))
 
     # ── Health Check ────────────────────────────────────────────────────────
     @app.get("/health", tags=["System"])
