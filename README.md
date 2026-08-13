@@ -24,8 +24,8 @@ FastAPI (API Layer)
 | Thành phần | Công nghệ |
 |---|---|
 | API Framework | FastAPI |
-| LLM | Anthropic Claude 3.5 Haiku / OpenAI GPT-4o-mini / Ollama |
-| Embedding | OpenAI `text-embedding-3-small` |
+| LLM | Anthropic Claude 3.5 / OpenAI GPT-4o / Google Gemini / Ollama |
+| Embedding | OpenAI `text-embedding-3-small` / Google Gemini `text-embedding-004` |
 | Vector Database | Qdrant |
 | Relational Database | PostgreSQL + SQLAlchemy async |
 | Task Queue | Celery + Redis |
@@ -37,9 +37,9 @@ FastAPI (API Layer)
 ## Yêu cầu trước khi cài đặt
 
 1. **Docker Desktop** — tải tại https://www.docker.com/products/docker-desktop/
-2. **API Keys** (cần ít nhất một trong hai):
-   - **OpenAI API Key** (bắt buộc — dùng cho embedding): https://platform.openai.com/api-keys
-   - **Anthropic API Key** (dùng cho LLM mặc định): https://console.anthropic.com/
+2. **API Keys** (cần ít nhất một nền tảng):
+   - **Google Gemini API Key** (Miễn phí 100%, khuyến nghị): https://aistudio.google.com/
+   - Hoặc **OpenAI / Anthropic API Key** (Trả phí).
 
 ---
 
@@ -61,15 +61,16 @@ cp .env.example .env
 Mở file `.env` và điền API key:
 
 ```env
-# Bắt buộc
+# Chọn một nền tảng để sử dụng (Ví dụ: Gemini miễn phí)
+LLM_PROVIDER=gemini           # anthropic | openai | ollama | gemini
+EMBEDDING_PROVIDER=gemini     # openai | gemini
+
+# Điền Key tương ứng
+GEMINI_API_KEY=AIzaSy...
+
+# Hoặc nếu dùng OpenAI/Anthropic:
 OPENAI_API_KEY=sk-...
-
-# Chọn một trong hai:
-ANTHROPIC_API_KEY=sk-ant-...   # dùng nếu LLM_PROVIDER=anthropic (mặc định)
-# hoặc để trống nếu dùng LLM_PROVIDER=openai
-
-# Cấu hình LLM (mặc định: anthropic)
-LLM_PROVIDER=anthropic         # anthropic | openai | ollama
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ### Bước 3 — Khởi động toàn bộ hệ thống
@@ -88,16 +89,16 @@ docker compose exec api alembic upgrade head
 
 > Chạy một lần duy nhất khi khởi tạo hoặc sau khi có migration mới.
 
-### Bước 5 — Kiểm tra
+### Bước 5 — Sử dụng Giao diện Web (Mới)
 
-Mở trình duyệt, truy cập:
+Mở trình duyệt, truy cập trực tiếp vào hệ thống:
 
 | URL | Mô tả |
 |---|---|
-| http://localhost:8000/docs | API documentation (Swagger UI) |
-| http://localhost:8000/health | Trạng thái kết nối DB + Qdrant |
-| http://localhost:5555 | Celery Flower — theo dõi task queue |
-| http://localhost:6333/dashboard | Qdrant dashboard |
+| **http://localhost:8000** | **Giao diện Web Chatbot (Upload file, chat, xem trích dẫn)** |
+| http://localhost:8000/docs | API documentation (Swagger UI) cho Developer |
+| http://localhost:5555 | Celery Flower — theo dõi hàng đợi xử lý nền |
+| http://localhost:6333/dashboard | Qdrant Vector DB dashboard |
 
 ---
 
@@ -237,9 +238,11 @@ pytest --cov=src --cov-report=term-missing
 
 | Biến | Mô tả | Mặc định |
 |---|---|---|
-| `OPENAI_API_KEY` | OpenAI API key (bắt buộc cho embedding) | — |
+| `GEMINI_API_KEY` | Google Gemini API key (Dùng cho cả LLM & Embedding) | — |
+| `OPENAI_API_KEY` | OpenAI API key | — |
 | `ANTHROPIC_API_KEY` | Anthropic API key | — |
-| `LLM_PROVIDER` | Provider LLM: `anthropic` / `openai` / `ollama` | `anthropic` |
+| `LLM_PROVIDER` | Provider LLM: `anthropic` / `openai` / `ollama` / `gemini` | `anthropic` |
+| `EMBEDDING_PROVIDER` | Provider Embedding: `openai` / `gemini` | `openai` |
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql+asyncpg://...` |
 | `QDRANT_URL` | Qdrant server URL | `http://localhost:6333` |
 | `REDIS_URL` | Redis connection string | `redis://localhost:6379/0` |
