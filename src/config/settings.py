@@ -20,10 +20,12 @@ class LLMProviderType(str, Enum):
     ANTHROPIC = "anthropic"
     OPENAI = "openai"
     OLLAMA = "ollama"
+    GEMINI = "gemini"
 
 
 class EmbeddingProviderType(str, Enum):
     OPENAI = "openai"
+    GEMINI = "gemini"
 
 
 class ChunkingStrategyType(str, Enum):
@@ -64,6 +66,11 @@ class Settings(BaseSettings):
     # ── Ollama ───────────────────────────────────────────────────────────────
     ollama_base_url: str = "http://localhost:11434"
     ollama_llm_model: str = "llama3.2"
+
+    # ── Gemini ───────────────────────────────────────────────────────────────
+    gemini_api_key: str = Field(default="", description="Google Gemini API Key")
+    gemini_llm_model: str = "gemini-1.5-flash"
+    gemini_embedding_model: str = "text-embedding-004"
 
     # ── Qdrant ───────────────────────────────────────────────────────────────
     qdrant_host: str = "localhost"

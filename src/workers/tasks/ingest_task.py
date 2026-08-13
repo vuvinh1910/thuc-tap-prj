@@ -23,7 +23,7 @@ def _build_ingestion_service():
     from src.core.services.ingestion_service import IngestionService
     from src.infrastructure.database.document_repo import PostgresDocumentRepository
     from src.infrastructure.database.session import AsyncSessionFactory
-    from src.infrastructure.embedding.openai_provider import OpenAIEmbeddingProvider
+    from src.api.dependencies import get_embedding_provider
     from src.infrastructure.file_storage.local_storage import LocalFileStorage
     from src.infrastructure.vector_store.qdrant_store import QdrantVectorStore
 
@@ -42,7 +42,7 @@ def _build_ingestion_service():
 
     return IngestionService(
         chunking_service=chunking_service,
-        embedding_provider=OpenAIEmbeddingProvider(),
+        embedding_provider=get_embedding_provider(settings),
         vector_store=QdrantVectorStore(),
         file_storage=LocalFileStorage(base_dir=settings.upload_dir),
         document_repo=PostgresDocumentRepository(session),

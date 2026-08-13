@@ -67,9 +67,12 @@ def get_embedding_provider(settings: SettingsDep) -> IEmbeddingProvider:
     """Factory: returns the configured embedding provider."""
     from src.config.settings import EmbeddingProviderType
     from src.infrastructure.embedding.openai_provider import OpenAIEmbeddingProvider
+    from src.infrastructure.embedding.gemini_provider import GeminiEmbeddingProvider
 
     if settings.embedding_provider == EmbeddingProviderType.OPENAI:
         return OpenAIEmbeddingProvider()
+    elif settings.embedding_provider == EmbeddingProviderType.GEMINI:
+        return GeminiEmbeddingProvider()
     raise ValueError(f"Unknown embedding provider: {settings.embedding_provider}")
 
 EmbeddingDep = Annotated[IEmbeddingProvider, Depends(get_embedding_provider)]
@@ -81,6 +84,7 @@ def get_llm_provider(settings: SettingsDep) -> ILLMProvider:
     from src.infrastructure.llm.anthropic_provider import AnthropicLLMProvider
     from src.infrastructure.llm.ollama_provider import OllamaLLMProvider
     from src.infrastructure.llm.openai_provider import OpenAILLMProvider
+    from src.infrastructure.llm.gemini_provider import GeminiLLMProvider
 
     if settings.llm_provider == LLMProviderType.ANTHROPIC:
         return AnthropicLLMProvider()
@@ -88,6 +92,8 @@ def get_llm_provider(settings: SettingsDep) -> ILLMProvider:
         return OpenAILLMProvider()
     elif settings.llm_provider == LLMProviderType.OLLAMA:
         return OllamaLLMProvider()
+    elif settings.llm_provider == LLMProviderType.GEMINI:
+        return GeminiLLMProvider()
     raise ValueError(f"Unknown LLM provider: {settings.llm_provider}")
 
 LLMDep = Annotated[ILLMProvider, Depends(get_llm_provider)]
