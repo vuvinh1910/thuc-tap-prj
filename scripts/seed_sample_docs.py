@@ -16,7 +16,9 @@ import httpx
 API_BASE = "http://localhost:8000/api/v1"
 
 
-async def upload_document(client: httpx.AsyncClient, file_path: Path) -> dict:
+import typing
+
+async def upload_document(client: httpx.AsyncClient, file_path: Path) -> typing.Any:
     """Upload a single document and return the response."""
     print(f"  📤 Uploading: {file_path.name} ({file_path.stat().st_size:,} bytes)")
     with open(file_path, "rb") as f:
