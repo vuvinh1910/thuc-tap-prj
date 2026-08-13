@@ -69,7 +69,7 @@ class Settings(BaseSettings):
 
     # ── Gemini ───────────────────────────────────────────────────────────────
     gemini_api_key: str = Field(default="", description="Google Gemini API Key")
-    gemini_llm_model: str = "gemini-1.5-flash"
+    gemini_llm_model: str = "gemini-3.6-flash"
     gemini_embedding_model: str = "text-embedding-004"
 
     # ── Qdrant ───────────────────────────────────────────────────────────────
